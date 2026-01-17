@@ -733,7 +733,7 @@ def run_server():
     print("  YouTube: POST to http://localhost:3001/api/transcript")
     print("  Audio (Whisper):   POST to http://localhost:3001/api/transcribe-audio")
     print("  Audio (Google):   POST to http://localhost:3001/api/transcribe-google")
-    app.run(host='0.0.0.0', port=3001, debug=True)
+    app.run(host='0.0.0.0', port=3001, debug=False)
 
 
 if __name__ == '__main__':
