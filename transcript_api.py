@@ -658,67 +658,55 @@ NOTES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'notes')
 if not os.path.exists(NOTES_DIR):
     os.makedirs(NOTES_DIR)
 
-@app.route('/api/notes', methods=['GET'])
-def list_notes():
-    """List all saved notes."""
+@app.route('/api/notes', methods=['GET', 'POST'])
+def manage_notes():
+    """List or Save notes."""
     try:
-        notes = []
-        if os.path.exists(NOTES_DIR):
-            files = sorted(os.listdir(NOTES_DIR), reverse=True)
-            for filename in files:
-                if filename.endswith('.txt'):
-                    file_path = os.path.join(NOTES_DIR, filename)
-                    stats = os.stat(file_path)
-                    
-                    # Read first line as title preview
-                    title = filename
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        first_line = f.readline().strip()
-                        if first_line:
-                            title = first_line[:50] # truncated title
-                            
-                    notes.append({
-                        'filename': filename,
-                        'title': title,
-                        'created_at': stats.st_ctime
-                    })
-        return jsonify({'notes': notes})
+        if request.method == 'GET':
+            notes = []
+            if os.path.exists(NOTES_DIR):
+                files = sorted(os.listdir(NOTES_DIR), reverse=True)
+                for filename in files:
+                    if filename.endswith('.txt'):
+                        file_path = os.path.join(NOTES_DIR, filename)
+                        stats = os.stat(file_path)
+                        title = filename
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            first_line = f.readline().strip()
+                            if first_line:
+                                title = first_line[:50]
+                        notes.append({
+                            'filename': filename,
+                            'title': title,
+                            'created_at': stats.st_ctime
+                        })
+            return jsonify({'notes': notes})
+            
+        elif request.method == 'POST':
+            data = request.get_json()
+            content = data.get('content')
+            filename = data.get('filename')
+            
+            if not content:
+                return jsonify({'error': 'Content is required'}), 400
+                
+            if filename:
+                filename = secure_filename(filename)
+                file_path = os.path.join(NOTES_DIR, filename)
+                if not os.path.exists(file_path):
+                    return jsonify({'error': 'Note not found for update'}), 404
+            else:
+                import datetime
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"note_{timestamp}.txt"
+                file_path = os.path.join(NOTES_DIR, filename)
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return jsonify({'message': 'Note saved', 'filename': filename})
+            
     except Exception as e:
-        print(f"Error listing notes: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/notes', methods=['POST'])
-def save_note():
-    """Save a new note or update an existing one."""
-    try:
-        data = request.get_json()
-        content = data.get('content')
-        filename = data.get('filename') # Optional: for updating existing notes
-        
-        if not content:
-            return jsonify({'error': 'Content is required'}), 400
-            
-        if filename:
-            # Update existing note
-            # Security check: ensure filename is safe and exists within NOTES_DIR
-            filename = secure_filename(filename)
-            file_path = os.path.join(NOTES_DIR, filename)
-            
-            if not os.path.exists(file_path):
-                return jsonify({'error': 'Note not found for update'}), 404
-        else:
-            # Generate filename based on timestamp for new note
-            import datetime
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"note_{timestamp}.txt"
-            file_path = os.path.join(NOTES_DIR, filename)
-        
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-            
-        return jsonify({'message': 'Note saved', 'filename': filename})
-    except Exception as e:
-        print(f"Error saving note: {e}")
+        print(f"Error managing notes: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/notes/<filename>', methods=['GET', 'DELETE'])
