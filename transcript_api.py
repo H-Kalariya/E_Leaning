@@ -39,6 +39,8 @@ from werkzeug.utils import secure_filename
 import speech_recognition as sr
 from pydub import AudioSegment
 from groq import Groq
+from word_export_utils import create_word_document
+from flask import send_file
 
 app = Flask(__name__)
 CORS(app)
@@ -480,46 +482,38 @@ def api_summarize():
             
         print("Generating summary with Groq...")
         
-        system_prompt = r"""You are an expert academic summarizer.
+        system_prompt = r"""You are an expert academic summarizer and scientific note-taker.
 
-You will be given the COMPLETE YouTube lecture transcript.
-Your task is to rewrite it into ONE continuous, detailed summary
-that faithfully covers EVERYTHING said in the lecture.
+You will be given the COMPLETE transcript of a lecture or video.
+Your task is to create a DETAILED, PROFESSIONALLY STRUCTURED note.
+
+DIRECTIONS:
+1. GENERATE A TITLE: Create a short, descriptive title for the session.
+2. INCLUDE FORMULAE (MANDATORY): This is the most important rule. If the lecture mentions ANY scientific, mathematical, or technical concepts (e.g., derivatives, gradients, entropy, vectors, physics laws), you MUST include the relevant formulae and equations using LaTeX. 
+   - Even if the speaker only names a concept (like "Partial Derivative"), you MUST find and insert the standard formula for it (e.g., \( \frac{\partial L}{\partial K_1} \)).
+   - Use \( ... \) for inline math.
+   - Use \[ ... \] for block math.
+3. STRUCTURE:
+   - Use `# [Title]` for the main title.
+   - Use `## [Topic]` for major sections.
+   - Use `### [Subtopic]` for details.
+   - Use **bold text** for key terms and definitions.
+   - Use bullet points and numbered lists for clarity.
 
 ABSOLUTE RULES:
-1. Do NOT add headings, subheadings, bullet points, or lists.
-2. Do NOT include sections like “key takeaways”, “summary”, or “conclusion”.
-3. Do NOT invent, generalize, or abstract content.
-4. Every idea in the output MUST come directly from the transcript.
-5. Preserve the original order and logical flow of the lecture.
-
-CONTENT RULES:
-- Rewrite spoken language into clear academic prose.
-- Remove filler words, repetitions, greetings, and pauses,
-  but NEVER remove meaningful information.
-- If the speaker explains something informally, rewrite it clearly
-  without adding new information.
-- If an idea is repeated, merge it naturally into one explanation.
-
-SCIENTIFIC & TECHNICAL FORMATTING:
-- Convert spoken mathematics into proper notation:
-  - “x square” → \( x^2 \)
-  - “log base 2 of n” → \( \log_2(n) \)
-  - “big O of n log n” → \( O(n \log n) \)
-- Preserve equations, formulas, and definitions exactly.
-- Format any code or pseudo-code in fenced blocks.
-
-ANTI-HALLUCINATION CHECK:
-If the transcript lacks concrete educational content,
-output ONLY:
-"ERROR: Transcript does not contain sufficient information to generate a detailed lecture summary."
+- If a formula exists for a concept mentioned, INCLUDE IT. NO EXCEPTIONS.
+- Every mathematical variable or scientific constant MUST be wrapped in LaTeX tags (e.g., \( x \), \( \hbar \), \( \pi \)).
+- Output MUST be structured markdown.
 
 OUTPUT FORMAT:
-- Plain text paragraphs only.
-- No titles.
-- No lists.
-- No headings.
-- Academic, neutral tone."""
+The first line MUST be: TITLE: [Your Generated Title]
+Followed by the structured markdown content."""
+
+        # Limit transcript length to roughly stay within token limits for free tier
+        max_chars = 25000 
+        if len(transcript_text) > max_chars:
+            print(f"Truncating transcript from {len(transcript_text)} to {max_chars} chars")
+            transcript_text = transcript_text[:max_chars] + "... [Transcript truncated due to length]"
 
         chat_completion = groq_client.chat.completions.create(
             messages=[
@@ -532,14 +526,27 @@ OUTPUT FORMAT:
                     "content": transcript_text,
                 }
             ],
-            model="llama-3.1-8b-instant",  # Faster model with higher rate limits
-            temperature=0.5,
+            model="llama-3.3-70b-versatile",
+            temperature=0.4,
         )
         
-        summary = chat_completion.choices[0].message.content
+        raw_content = chat_completion.choices[0].message.content
         print("Summary generated successfully")
         
-        return jsonify({'summary': summary})
+        # Parse title and content
+        title = "Lecture Summary"
+        content = raw_content
+        
+        if raw_content.startswith("TITLE:"):
+            lines = raw_content.split('\n', 1)
+            title = lines[0].replace("TITLE:", "").strip()
+            if len(lines) > 1:
+                content = lines[1].strip()
+        
+        return jsonify({
+            'title': title,
+            'summary': content
+        })
         
     except Exception as e:
         print(f"Summary Error: {e}")
@@ -682,18 +689,29 @@ def list_notes():
 
 @app.route('/api/notes', methods=['POST'])
 def save_note():
-    """Save a new note."""
+    """Save a new note or update an existing one."""
     try:
         data = request.get_json()
         content = data.get('content')
+        filename = data.get('filename') # Optional: for updating existing notes
+        
         if not content:
             return jsonify({'error': 'Content is required'}), 400
             
-        # Generate filename based on timestamp
-        import datetime
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"note_{timestamp}.txt"
-        file_path = os.path.join(NOTES_DIR, filename)
+        if filename:
+            # Update existing note
+            # Security check: ensure filename is safe and exists within NOTES_DIR
+            filename = secure_filename(filename)
+            file_path = os.path.join(NOTES_DIR, filename)
+            
+            if not os.path.exists(file_path):
+                return jsonify({'error': 'Note not found for update'}), 404
+        else:
+            # Generate filename based on timestamp for new note
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"note_{timestamp}.txt"
+            file_path = os.path.join(NOTES_DIR, filename)
         
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -703,23 +721,84 @@ def save_note():
         print(f"Error saving note: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/notes/<filename>', methods=['GET'])
-def get_note(filename):
-    """Get a specific note content."""
+@app.route('/api/notes/<filename>', methods=['GET', 'DELETE'])
+def manage_note(filename):
+    """Get or Delete a specific note."""
     try:
-        if not allowed_file(filename) and not filename.endswith('.txt'):
-             return jsonify({'error': 'Invalid filename'}), 400
+        filename = secure_filename(filename)
+        file_path = os.path.join(NOTES_DIR, filename)
+        
+        if request.method == 'DELETE':
+            print(f"🗑️ Deleting note: {filename}")
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                print("✅ File deleted successfully")
+                return jsonify({'message': 'Note deleted successfully'})
+            else:
+                print("❌ File not found for deletion")
+                return jsonify({'error': 'Note not found'}), 404
+                
+        elif request.method == 'GET':
+            if not allowed_file(filename) and not filename.endswith('.txt'):
+                 return jsonify({'error': 'Invalid filename'}), 400
 
-        file_path = os.path.join(NOTES_DIR, secure_filename(filename))
-        if not os.path.exists(file_path):
-            return jsonify({'error': 'Note not found'}), 404
+            if not os.path.exists(file_path):
+                return jsonify({'error': 'Note not found'}), 404
+                
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                
+            return jsonify({'content': content})
             
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-            
-        return jsonify({'content': content})
     except Exception as e:
-        print(f"Error reading note: {e}")
+        print(f"❌ Error managing note ({request.method}): {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/export-docx', methods=['POST'])
+def export_docx():
+    """Export note content to a Word document."""
+    try:
+        if not request.is_json:
+            return jsonify({'error': 'Request must be JSON'}), 400
+            
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({'error': 'Invalid or missing JSON payload'}), 400
+            
+        content = data.get('content')
+        title = data.get('title', 'note')
+        
+        if not content:
+            return jsonify({'error': 'Content is required'}), 400
+            
+        # Create a safe filename
+        safe_title = secure_filename(title)
+        if not safe_title or safe_title == '':
+            safe_title = 'exported_note'
+            
+        filename = f"{safe_title}.docx"
+        temp_dir = tempfile.gettempdir()
+        file_path = os.path.join(temp_dir, filename)
+        
+        print(f"📄 Exporting Word doc: {filename}")
+        
+        # Generate the Word document
+        create_word_document(content, file_path)
+        
+        if not os.path.exists(file_path):
+             return jsonify({'error': 'Failed to generate Word document on disk'}), 500
+
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+    except Exception as e:
+        print(f"❌ Error exporting docx: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 

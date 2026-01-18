@@ -15,9 +15,12 @@ function App() {
   const [summary, setSummary] = useState(null)
   const [loadingSummary, setLoadingSummary] = useState(false)
   const [savedNotes, setSavedNotes] = useState([])
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Edit vs Preview mode
   const [isEditing, setIsEditing] = useState(false)
+  const [currentFilename, setCurrentFilename] = useState(null)
+  const [noteTitle, setNoteTitle] = useState('')
 
   // Fetch saved notes on mount
   React.useEffect(() => {
@@ -36,6 +39,53 @@ function App() {
     }
   }
 
+  const deleteNote = async (filename, e) => {
+    if (e) e.stopPropagation()
+    console.log('🗑️ Attempting to delete note:', filename)
+    if (!window.confirm(`Are you sure you want to delete "${filename}"?`)) return
+
+    try {
+      const response = await fetch(`/api/notes/${filename}`, {
+        method: 'DELETE',
+        headers: {
+          'Accept': 'application/json'
+        }
+      })
+
+      let data
+      const contentType = response.headers.get("content-type")
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json()
+      } else {
+        const text = await response.text()
+        console.warn('Received non-JSON response:', text)
+        throw new Error(`Server error: ${response.status} ${response.statusText}`)
+      }
+
+      console.log('Delete response:', data)
+
+      if (response.ok) {
+        console.log('✅ Note deleted successfully')
+        fetchNotes() // Refresh sidebar
+        if (currentFilename === filename) {
+          setSummary(null)
+          setNoteTitle('')
+          setCurrentFilename(null)
+        }
+      } else {
+        throw new Error(data.error || 'Failed to delete note')
+      }
+    } catch (err) {
+      console.error('Error deleting note:', err)
+      alert('Failed to delete note: ' + err.message)
+    }
+  }
+
+  const filteredNotes = savedNotes.filter(note =>
+    (note.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    note.filename.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
   const saveToLibrary = async () => {
     if (!summary) return
 
@@ -43,7 +93,10 @@ function App() {
       const response = await fetch('/api/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: summary })
+        body: JSON.stringify({
+          content: summary,
+          filename: currentFilename
+        })
       })
 
       if (response.ok) {
@@ -65,6 +118,9 @@ function App() {
       if (response.ok) {
         const data = await response.json()
         setSummary(data.content)
+        setNoteTitle(filename.replace('.txt', '').replace(/_/g, ' '))
+        setCurrentFilename(filename)
+        setIsEditing(false)
       }
     } catch (err) {
       console.error('Error loading note:', err)
@@ -141,6 +197,9 @@ function App() {
     setLoading(true)
     setError(null)
     setTranscripts([])
+    setSummary(null)
+    setNoteTitle('')
+    setCurrentFilename(null)
 
     const formData = new FormData()
     formData.append('audio', file)
@@ -198,6 +257,9 @@ function App() {
 
       const data = await response.json()
       setSummary(data.summary)
+      if (data.title) {
+        setNoteTitle(data.title)
+      }
       setIsEditing(false) // Auto switch to preview mode when summary is ready
       console.log('Summary generated and set to Preview mode')
     } catch (err) {
@@ -208,19 +270,39 @@ function App() {
     }
   }
 
-  const downloadSummary = () => {
-    if (!summary) return
+  const exportToWord = async () => {
+    if (!summary) return;
 
-    const blob = new Blob([summary], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'lecture_summary.txt'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
+    try {
+      const response = await fetch('/api/export-docx', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: summary,
+          title: noteTitle || (currentFilename ? currentFilename.replace('.txt', '') : 'lecture_summary')
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to export Word document');
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = noteTitle ? `${noteTitle.replace(/\s+/g, '_')}.docx` : (currentFilename ? currentFilename.replace('.txt', '.docx') : 'lecture_summary.docx');
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Word export error:', err);
+      alert('Failed to export Word document: ' + err.message);
+    }
+  };
 
   const extractTranscript = async () => {
     if (!youtubeUrl) {
@@ -231,6 +313,9 @@ function App() {
     setLoading(true)
     setError(null)
     setTranscripts([])
+    setSummary(null)
+    setNoteTitle('')
+    setCurrentFilename(null)
 
     try {
       console.log('Sending request to:', '/api/transcript')
@@ -296,21 +381,42 @@ function App() {
     <div className="App-container">
       {/* Sidebar */}
       <div className="sidebar">
-        <h2>📚 Saved Notes</h2>
+        <div className="sidebar-header">
+          <h2>📚 Saved Notes</h2>
+          <div className="search-box">
+            <input
+              type="text"
+              placeholder="Search notes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
         <div className="notes-list">
-          {savedNotes.length === 0 && (
-            <div className="empty-notes">No saved notes yet.</div>
+          {filteredNotes.length === 0 && (
+            <div className="empty-notes">
+              {searchQuery ? 'No notes match your search.' : 'No saved notes yet.'}
+            </div>
           )}
-          {savedNotes.map((note) => (
+          {filteredNotes.map((note) => (
             <div
               key={note.filename}
-              className="note-item"
+              className={`note-item ${currentFilename === note.filename ? 'active' : ''}`}
               onClick={() => loadNote(note.filename)}
             >
-              <div className="note-title">{note.title || 'Untitled Note'}</div>
-              <div className="note-date">
-                {new Date(note.created_at * 1000).toLocaleDateString()}
+              <div className="note-info">
+                <div className="note-title">{note.title || 'Untitled Note'}</div>
+                <div className="note-date">
+                  {new Date(note.created_at * 1000).toLocaleDateString()}
+                </div>
               </div>
+              <button
+                className="delete-note-btn"
+                onClick={(e) => deleteNote(note.filename, e)}
+                title="Delete note"
+              >
+                🗑️
+              </button>
             </div>
           ))}
         </div>
@@ -428,8 +534,19 @@ function App() {
               </div>
 
               <div className="summary-section">
-                <div className="divider"></div>
-                <h3>AI Lecture Summary</h3>
+                <div className="note-header">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      className="note-title-input"
+                      value={noteTitle}
+                      onChange={(e) => setNoteTitle(e.target.value)}
+                      placeholder="Note Title"
+                    />
+                  ) : (
+                    <h3>{noteTitle || 'AI Lecture Summary'}</h3>
+                  )}
+                </div>
 
                 {summary === null ? (
                   <button
@@ -441,7 +558,7 @@ function App() {
                     disabled={loadingSummary}
                     className="extract-btn summary-btn"
                   >
-                    {loadingSummary ? 'Generating Summary...' : '✨ Generate Detailed Summary'}
+                    {loadingSummary ? 'Generating Summary...' : '✨ Generate Detailed Note with Formulae'}
                   </button>
                 ) : (
                   <div className="summary-container">
@@ -456,32 +573,41 @@ function App() {
                       <button type="button" onClick={saveToLibrary} className="action-btn save-lib">
                         📚 Save to Library
                       </button>
-                      <button type="button" onClick={downloadSummary} className="action-btn download">
-                        💾 Download Note
+                      <button type="button" onClick={exportToWord} className="action-btn export-word">
+                        📝 Export to Word
                       </button>
-                      <button type="button" onClick={() => setSummary(null)} className="action-btn clear">
+                      <button type="button" onClick={() => { setSummary(null); setNoteTitle(''); setCurrentFilename(null); }} className="action-btn clear">
                         ❌ Clear
                       </button>
                     </div>
 
                     {isEditing ? (
-                      <textarea
-                        value={summary}
-                        onChange={(e) => setSummary(e.target.value)}
-                        className="summary-editor"
-                        rows={20}
-                        placeholder="Summary will appear here..."
-                      />
+                      <div className="editor-wrapper">
+                        <div className="editor-toolbar">
+                          <button onClick={() => setSummary(prev => prev + ' \\(  \\)')} title="Math Expression Small">\( x \)</button>
+                          <button onClick={() => setSummary(prev => prev + ' \\( \\sqrt{x} \\)')} title="Square Root">√</button>
+                          <button onClick={() => setSummary(prev => prev + ' \\( x^2 \\)')} title="Square">x²</button>
+                          <button onClick={() => setSummary(prev => prev + ' \\( \\int_{a}^{b} f(x) dx \\)')} title="Integral">∫</button>
+                          <button onClick={() => setSummary(prev => prev + ' \\( \\sum_{n=1}^{\\infty} \\)')} title="Sum">∑</button>
+                          <button onClick={() => setSummary(prev => prev + ' \\( \\psi \\)')} title="Psi">ψ</button>
+                          <button onClick={() => setSummary(prev => prev + ' \\( \\hbar \\)')} title="hbar">ℏ</button>
+                          <span className="toolbar-hint">Hint: Use \( formula \) for scientific symbols</span>
+                        </div>
+                        <textarea
+                          value={summary}
+                          onChange={(e) => setSummary(e.target.value)}
+                          className="summary-editor"
+                          rows={20}
+                          placeholder="Summary will appear here..."
+                        />
+                      </div>
                     ) : (
                       <div className="summary-preview">
                         <ReactMarkdown
                           children={String(summary || '')
-                            .replace(/\\\(/g, ' $ ')
-                            .replace(/\\\)/g, ' $ ')
-                            .replace(/\\\[/g, ' $$ ')
-                            .replace(/\\\]/g, ' $$ ')
-                            .replace(/\((?=\s*\\sqrt)/g, '$')  // Handle ( \sqrt ) if it happens
-                            .replace(/\\sqrt(.*?)\)/g, '\\sqrt$1$') // Close it
+                            // Use more robust replacements for math delimiters
+                            .replace(/\\\[([\s\S]*?)\\\]/g, (_, match) => `$$${match.trim()}$$`)
+                            .replace(/\\\(([\s\S]*?)\\\)/g, (_, match) => `$${match.trim()}$`)
                           }
                           remarkPlugins={[remarkMath]}
                           rehypePlugins={[rehypeKatex]}
