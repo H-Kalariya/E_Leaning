@@ -5,6 +5,10 @@ import rehypeKatex from 'rehype-katex'
 import remarkMath from 'remark-math'
 import 'katex/dist/katex.min.css'
 
+// IMPORTANT: Set this to your live backend URL after deploying (e.g., https://your-backend.onrender.com)
+// If empty, it uses the same domain as the frontend (works for local dev proxy)
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 function App() {
   const [youtubeUrl, setYoutubeUrl] = useState('')
   const [transcripts, setTranscripts] = useState([])
@@ -29,7 +33,7 @@ function App() {
 
   const fetchNotes = async () => {
     try {
-      const response = await fetch('/api/notes')
+      const response = await fetch(`${API_BASE}/api/notes`)
       if (response.ok) {
         const data = await response.json()
         setSavedNotes(data.notes || [])
@@ -42,10 +46,10 @@ function App() {
   const deleteNote = async (filename, e) => {
     if (e) e.stopPropagation()
     console.log('🗑️ Attempting to delete note:', filename)
-    if (!window.confirm(`Are you sure you want to delete "${filename}"?`)) return
+    if (!window.confirm(`Are you sure you want to delete "${filename}" ? `)) return
 
     try {
-      const response = await fetch(`/api/notes/${filename}`, {
+      const response = await fetch(`${API_BASE}/api/notes/${filename}`, {
         method: 'DELETE',
         headers: {
           'Accept': 'application/json'
@@ -90,7 +94,7 @@ function App() {
     if (!summary) return
 
     try {
-      const response = await fetch('/api/notes', {
+      const response = await fetch(`${API_BASE}/api/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -114,7 +118,7 @@ function App() {
 
   const loadNote = async (filename) => {
     try {
-      const response = await fetch(`/api/notes/${filename}`)
+      const response = await fetch(`${API_BASE}/api/notes/${filename}`)
       if (response.ok) {
         const data = await response.json()
         setSummary(data.content)
@@ -205,7 +209,7 @@ function App() {
     formData.append('audio', file)
 
     try {
-      const response = await fetch('/api/transcribe-audio', {
+      const response = await fetch(`${API_BASE}/api/transcribe-audio`, {
         method: 'POST',
         body: formData,
       })
@@ -243,7 +247,7 @@ function App() {
       // Aggregate transcript if needed (it's already aggregated in backend but just in case)
       const fullText = transcripts.map(t => t.text).join(' ')
 
-      const response = await fetch('/api/summarize', {
+      const response = await fetch(`${API_BASE}/api/summarize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -274,7 +278,7 @@ function App() {
     if (!summary) return;
 
     try {
-      const response = await fetch('/api/export-docx', {
+      const response = await fetch(`${API_BASE}/api/export-docx`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -321,7 +325,7 @@ function App() {
       console.log('Sending request to:', '/api/transcript')
       console.log('Request body:', JSON.stringify({ url: youtubeUrl }))
 
-      const response = await fetch('/api/transcript', {
+      const response = await fetch(`${API_BASE}/api/transcript`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
