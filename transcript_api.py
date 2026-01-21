@@ -59,6 +59,15 @@ groq_client = Groq(api_key=groq_api_key) if groq_api_key else None
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint."""
+    return jsonify({
+        'status': 'online',
+        'groq_key': bool(groq_api_key),
+        'message': 'Backend is running'
+    })
+
 def transcribe_audio_file(audio_file_path):
     """Transcribe audio file using Whisper."""
     try:
@@ -489,11 +498,11 @@ Your task is to create a DETAILED, PROFESSIONALLY STRUCTURED note.
 
 DIRECTIONS:
 1. GENERATE A TITLE: Create a short, descriptive title for the session.
-2. INCLUDE FORMULAE (MANDATORY): This is the most important rule. If the lecture mentions ANY scientific, mathematical, or technical concepts (e.g., derivatives, gradients, entropy, vectors, physics laws), you MUST include the relevant formulae and equations using LaTeX. 
-   - Even if the speaker only names a concept (like "Partial Derivative"), you MUST find and insert the standard formula for it (e.g., \( \frac{\partial L}{\partial K_1} \)).
+2. FORMULAE & EQUATIONS: If the lecture mentions specific mathematical or scientific concepts (e.g., derivatives, gradients, entropy, vectors, physics laws) where a formula is relevant, include the relevant formulae using LaTeX. 
    - Use \( ... \) for inline math.
    - Use \[ ... \] for block math.
-3. STRUCTURE:
+3. CODE BLOCKS: If the lecture discusses programming, algorithms, or specific code snippets, include the relevant code blocks using markdown syntax (e.g., ```python ... ```).
+4. STRUCTURE:
    - Use `# [Title]` for the main title.
    - Use `## [Topic]` for major sections.
    - Use `### [Subtopic]` for details.
@@ -501,7 +510,7 @@ DIRECTIONS:
    - Use bullet points and numbered lists for clarity.
 
 ABSOLUTE RULES:
-- If a formula exists for a concept mentioned, INCLUDE IT. NO EXCEPTIONS.
+- Include formulae and code ONLY when they are relevant to the specific content being discussed.
 - Every mathematical variable or scientific constant MUST be wrapped in LaTeX tags (e.g., \( x \), \( \hbar \), \( \pi \)).
 - Output MUST be structured markdown.
 
@@ -556,13 +565,11 @@ Followed by the structured markdown content."""
         }), 500
 
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    return jsonify({'status': 'ok', 'message': 'Python transcript server is running'})
-
+@click.command()
 @click.argument('input_path', type=click.Path(exists=True))
 @click.option('--output', '-o', type=click.Path(), help='Output file path (default: stdout)')
 @click.option('--timestamps/--no-timestamps', default=True, help='Include timestamps (default: True)')
+@click.option('--audio/--no-audio', default=None, help='Force process as audio file')
 @click.option('--method', type=click.Choice(['whisper', 'google']), default='whisper', help='Transcription method (whisper or google)')
 def main(input_path: str, output: Optional[str], timestamps: bool, audio: Optional[bool], method: str) -> None:
     """Extract transcript from YouTube video or audio file.

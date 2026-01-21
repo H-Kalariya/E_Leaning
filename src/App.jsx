@@ -14,6 +14,7 @@ function App() {
   const [transcripts, setTranscripts] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [backendStatus, setBackendStatus] = useState('checking') // 'checking', 'online', 'offline'
 
   const [mode, setMode] = useState('youtube') // 'youtube' or 'audio'
   const [summary, setSummary] = useState(null)
@@ -26,10 +27,29 @@ function App() {
   const [currentFilename, setCurrentFilename] = useState(null)
   const [noteTitle, setNoteTitle] = useState('')
 
-  // Fetch saved notes on mount
+  // Fetch saved notes and check backend on mount
   React.useEffect(() => {
+    checkBackend()
     fetchNotes()
   }, [])
+
+  const checkBackend = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/health`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.groq_key === false) {
+          setBackendStatus('key-missing')
+        } else {
+          setBackendStatus('online')
+        }
+      } else {
+        setBackendStatus('offline')
+      }
+    } catch (err) {
+      setBackendStatus('offline')
+    }
+  }
 
   const fetchNotes = async () => {
     try {
@@ -426,9 +446,16 @@ function App() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="main-content">
         <div className="card">
+          <div className="status-badge-container">
+            <span className={`status-badge ${backendStatus}`} title={backendStatus === 'key-missing' ? 'Groq API Key (GROQ_API_KEY) is missing in .env file' : ''}>
+              {backendStatus === 'online' ? '● Backend Online' :
+                backendStatus === 'offline' ? '○ Backend Offline' :
+                  backendStatus === 'key-missing' ? '⚠ Groq Key Missing' :
+                    '... Checking Backend'}
+            </span>
+          </div>
           <h1>Transcript Extractor</h1>
 
           <div className="tabs">
