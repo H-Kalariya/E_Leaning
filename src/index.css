@@ -1,17 +1,60 @@
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  /* Brand Palette */
+  --primary: #4f46e5;
+  /* Indigo 600 - Trustworthy & Professional */
+  --primary-hover: #4338ca;
+  /* Indigo 700 */
+  --primary-light: #e0e7ff;
+  /* Indigo 100 */
+
+  --secondary: #64748b;
+  /* Slate 500 - Neutral actions */
+  --secondary-hover: #475569;
+
+  --success: #10b981;
+  /* Emerald 500 */
+  --danger: #ef4444;
+  /* Red 500 */
+  --warning: #f59e0b;
+  /* Amber 500 */
+
+  /* Neutral Palette (Slate) */
+  --bg-app: #f8fafc;
+  /* Slate 50 */
+  --bg-surface: #ffffff;
+  /* White */
+  --bg-sidebar: #0f172a;
+  /* Slate 900 - Dark sidebar for contrast */
+
+  --text-main: #1e293b;
+  /* Slate 800 */
+  --text-secondary: #64748b;
+  /* Slate 500 */
+  --text-inverse: #f8fafc;
+  /* Slate 50 */
+
+  --border: #e2e8f0;
+  /* Slate 200 */
+  --border-focus: #4f46e5;
+
+  /* Spacing & Layout */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  /* Transitions */
+  --transition: all 0.2s ease-in-out;
+
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  background-attachment: fixed;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  color-scheme: light;
 }
 
 * {
@@ -23,8 +66,33 @@
 body {
   margin: 0;
   min-height: 100vh;
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
-  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }

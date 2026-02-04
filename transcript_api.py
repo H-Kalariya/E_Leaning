@@ -351,7 +351,7 @@ def api_transcribe_google():
         if not allowed_file(file.filename):
             return jsonify({"error": "Unsupported audio format"}), 400
         
-        print(f"🎤 Google Speech Recognition: {file.filename}")
+        print(f"Google Speech Recognition: {file.filename}")
         
         # Read file directly into memory
         audio_bytes = file.read()
@@ -388,7 +388,7 @@ def api_transcribe_google():
                 "duration": 30.0
             }]
             
-            print(f"✅ Google Speech Recognition completed: {len(text)} characters")
+            print(f"Google Speech Recognition completed: {len(text)} characters")
             
             return jsonify({
                 "filename": file.filename,
@@ -408,7 +408,7 @@ def api_transcribe_google():
                     pass
         
     except Exception as e:
-        print(f"❌ Google Speech Recognition Error: {e}")
+        print(f"Google Speech Recognition Error: {e}")
         return jsonify({
             "error": "Failed to transcribe audio",
             "details": str(e)
@@ -589,7 +589,7 @@ def main(input_path: str, output: Optional[str], timestamps: bool, audio: Option
             click.echo(f"Transcribing audio file: {input_path}")
             
             if method == 'google':
-                click.echo("🎤 Using Google Speech Recognition...")
+                click.echo("Using Google Speech Recognition...")
                 transcript_data = []
                 wav_file = prepare_voice_file(input_path)
                 
@@ -598,7 +598,7 @@ def main(input_path: str, output: Optional[str], timestamps: bool, audio: Option
                     text = transcribe_with_google_speech(audio_data)
                     
                     if text.startswith("Google Speech Recognition") or text.startswith("Speech recognition error"):
-                        click.echo("❌ Speech recognition failed", err=True)
+                        click.echo("Speech recognition failed", err=True)
                         sys.exit(1)
                     
                     # Create transcript segments
@@ -608,14 +608,14 @@ def main(input_path: str, output: Optional[str], timestamps: bool, audio: Option
                         'duration': 30.0
                     })
                     
-                    click.echo(f"✅ Google Speech Recognition completed: {len(text)} characters")
+                    click.echo(f"Google Speech Recognition completed: {len(text)} characters")
             else:
                 # Use Whisper
-                click.echo("🧠 Using Whisper...")
+                click.echo("Using Whisper...")
                 transcript_data = transcribe_audio_file(input_path)
             
             if not transcript_data:
-                click.echo("❌ Transcription failed", err=True)
+                click.echo("Transcription failed", err=True)
                 sys.exit(1)
         else:
             # Handle YouTube URL
@@ -724,13 +724,13 @@ def manage_note(filename):
         file_path = os.path.join(NOTES_DIR, filename)
         
         if request.method == 'DELETE':
-            print(f"🗑️ Deleting note: {filename}")
+            print(f"Deleting note: {filename}")
             if os.path.exists(file_path):
                 os.remove(file_path)
-                print("✅ File deleted successfully")
+                print("File deleted successfully")
                 return jsonify({'message': 'Note deleted successfully'})
             else:
-                print("❌ File not found for deletion")
+                print("File not found for deletion")
                 return jsonify({'error': 'Note not found'}), 404
                 
         elif request.method == 'GET':
@@ -746,7 +746,7 @@ def manage_note(filename):
             return jsonify({'content': content})
             
     except Exception as e:
-        print(f"❌ Error managing note ({request.method}): {e}")
+        print(f"Error managing note ({request.method}): {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -776,7 +776,7 @@ def export_docx():
         temp_dir = tempfile.gettempdir()
         file_path = os.path.join(temp_dir, filename)
         
-        print(f"📄 Exporting Word doc: {filename}")
+        print(f"Exporting Word doc: {filename}")
         
         # Generate the Word document
         create_word_document(content, file_path)
@@ -791,7 +791,7 @@ def export_docx():
             mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         )
     except Exception as e:
-        print(f"❌ Error exporting docx: {e}")
+        print(f"Error exporting docx: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -799,7 +799,7 @@ def export_docx():
 
 def run_server():
     """Run the Flask server."""
-    print("🚀 Python transcript server running on http://localhost:3001")
+    print("Python transcript server running on http://localhost:3001")
     print("CLI Usage:")
     print("  YouTube: python transcript_api.py <youtube_url>")
     print("  Audio:   python transcript_api.py <audio_file.mp3> [--method=whisper|google]")
