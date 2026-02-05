@@ -41,13 +41,103 @@ from pydub import AudioSegment
 from groq import Groq
 from word_export_utils import create_word_document
 from flask import send_file
+import sqlite3
+import contextlib
+
+# Database Helper
+@contextlib.contextmanager
+def get_db():
+    conn = sqlite3.connect('app.db', timeout=10) # 10s timeout to handle locking
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+# Database Setup
+def init_db():
+    with get_db() as conn:
+        c = conn.cursor()
+        
+        # Enable WAL mode for better concurrency
+        try:
+            c.execute('PRAGMA journal_mode=WAL')
+        except:
+            pass
+        
+        # Create videos table
+        # Create videos table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS videos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                filename TEXT, -- Can be null for YouTube links
+                url TEXT,      -- For external links
+                type TEXT DEFAULT 'upload', -- 'upload' or 'youtube'
+                thumbnail TEXT,
+                duration REAL,
+                upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''') 
+    
+        # Check if we need to migrate schema (simple hack for dev)
+        try:
+            c.execute('ALTER TABLE videos ADD COLUMN url TEXT')
+            c.execute('ALTER TABLE videos ADD COLUMN type TEXT DEFAULT "upload"')
+            c.execute('ALTER TABLE videos ADD COLUMN thumbnail TEXT')
+        except sqlite3.OperationalError:
+            pass # Columns likely exist
+            
+        conn.commit()
+        
+        # Create users table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT DEFAULT 'student',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Check if admin exists
+        try:
+            c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", 
+                     ('admin', 'admin123', 'admin'))
+            c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", 
+                     ('teacher', 'teacher123', 'teacher'))
+            c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", 
+                     ('student', 'student123', 'student'))
+            print("Initialized default users: admin, teacher, student")
+        except sqlite3.IntegrityError:
+            pass # Users already exist
+            
+        c.execute('SELECT count(*) FROM videos')
+        if c.fetchone()[0] == 0:
+            seed_courses = [
+                ('Python for Beginners - Full Course', 'https://www.youtube.com/watch?v=eWRfhZUzrAc', 'youtube', 'https://img.youtube.com/vi/eWRfhZUzrAc/hqdefault.jpg'),
+                ('React JS - React Tutorial for Beginners', 'https://www.youtube.com/watch?v=Ke90Tje7VS0', 'youtube', 'https://img.youtube.com/vi/Ke90Tje7VS0/hqdefault.jpg'),
+                ('Machine Learning for Everybody', 'https://www.youtube.com/watch?v=i_LwzRVP7bg', 'youtube', 'https://img.youtube.com/vi/i_LwzRVP7bg/hqdefault.jpg'),
+                ('Data Science Full Course', 'https://www.youtube.com/watch?v=X3paOmcrTjQ', 'youtube', 'https://img.youtube.com/vi/X3paOmcrTjQ/hqdefault.jpg')
+            ]
+            c.executemany('INSERT INTO videos (title, url, type, thumbnail, duration, filename) VALUES (?, ?, ?, ?, 0, "external_link")', seed_courses)
+            print(f"Seeded {len(seed_courses)} YouTube courses")
+            conn.commit()
+
+# Initialize DB on startup
+init_db()
 
 app = Flask(__name__)
 CORS(app)
 
 # Configure upload settings
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
-ALLOWED_EXTENSIONS = {'mp3', 'wav', 'm4a', 'flac', 'ogg', 'aac', 'wma', 'webm'}
+ALLOWED_EXTENSIONS = {'mp3', 'wav', 'm4a', 'flac', 'ogg', 'aac', 'wma', 'webm', 'mp4', 'mov', 'avi'}
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'videos')
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
 
 # Groq Client - Load API key from environment variable
 groq_api_key = os.getenv('GROQ_API_KEY')
@@ -58,6 +148,65 @@ groq_client = Groq(api_key=groq_api_key) if groq_api_key else None
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# --- Auth Endpoints ---
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not username or not password:
+        return jsonify({'error': 'Username and password required'}), 400
+        
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute('SELECT * FROM users WHERE username = ?', (username,))
+        user = c.fetchone()
+    
+    if user and user['password'] == password: # In real app, use bcrypt
+        return jsonify({
+            'message': 'Login successful',
+            'user': {
+                'id': user['id'],
+                'username': user['username'],
+                'role': user['role']
+            }
+        })
+    
+    return jsonify({'error': 'Invalid credentials'}), 401
+
+@app.route('/api/auth/register', methods=['POST'])
+def api_register():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    role = data.get('role', 'student') 
+    
+    if not username or not password:
+        return jsonify({'error': 'Username and password required'}), 400
+        
+    try:
+        with get_db() as conn:
+            c = conn.cursor()
+            c.execute('INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
+                     (username, password, role))
+            conn.commit()
+            last_id = c.lastrowid
+        
+        return jsonify({
+            'message': 'User registered successfully',
+            'user': {
+                'id': last_id,
+                'username': username,
+                'role': role
+            }
+        })
+    except sqlite3.IntegrityError:
+        return jsonify({'error': 'Username already exists'}), 409
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -795,6 +944,81 @@ def export_docx():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+# --- Video Management ---
+
+@app.route('/api/videos/upload', methods=['POST'])
+def api_upload_video():
+    """Upload a video file."""
+    try:
+        if 'video' not in request.files:
+            return jsonify({'error': 'No video file provided'}), 400
+            
+        file = request.files['video']
+        title = request.form.get('title', file.filename)
+        
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+            
+        if file:
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            file.save(file_path)
+            
+            # Save to DB
+            with get_db() as conn:
+                c = conn.cursor()
+                c.execute('INSERT INTO videos (title, filename, duration, type) VALUES (?, ?, ?, ?)',
+                          (title, filename, 0, 'upload'))
+                conn.commit()
+                video_id = c.lastrowid
+            
+            return jsonify({'message': 'Video uploaded successfully', 'id': video_id, 'filename': filename})
+            
+    except Exception as e:
+        print(f"Upload Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/videos', methods=['GET'])
+def api_list_videos():
+    """List all videos."""
+    try:
+        with get_db() as conn:
+            c = conn.cursor()
+            c.execute('SELECT * FROM videos ORDER BY upload_date DESC')
+            rows = c.fetchall()
+        
+        videos = []
+        for row in rows:
+            # Debug print for first row
+            if rows.index(row) == 0:
+                print(f"DEBUG ROW KEYS: {row.keys()}")
+            
+            videos.append({
+                'id': row['id'],
+                'title': row['title'],
+                'filename': row['filename'],
+                'url': row['url'],
+                'type': row['type'] or 'upload',
+                'thumbnail': row['thumbnail'],
+                'upload_date': row['upload_date']
+            })
+            
+        return jsonify({'videos': videos})
+    except Exception as e:
+        print(f"List Videos Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/videos/<filename>')
+def serve_video(filename):
+    """Serve video file."""
+    return send_file(os.path.join(UPLOAD_FOLDER, filename))
+
+# Simple health‑check route for debugging
+@app.route('/api/ping', methods=['GET'])
+def api_ping():
+    return jsonify({'status': 'ok'})
 
 
 def run_server():

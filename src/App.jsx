@@ -1,5 +1,11 @@
 import React, { useState } from 'react'
 import './App.css'
+import './App.css'
+import UploadVideo from './components/UploadVideo'
+import VideoLibrary from './components/VideoLibrary'
+import CourseTimeline from './components/CourseTimeline'
+import Login from './components/Login'
+import Signup from './components/Signup'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkMath from 'remark-math'
@@ -16,11 +22,16 @@ function App() {
   const [error, setError] = useState(null)
   const [backendStatus, setBackendStatus] = useState('checking') // 'checking', 'online', 'offline'
 
-  const [mode, setMode] = useState('youtube') // 'youtube' or 'audio'
+  const [mode, setMode] = useState('youtube') // 'youtube', 'audio', 'library', 'upload'
   const [summary, setSummary] = useState(null)
   const [loadingSummary, setLoadingSummary] = useState(false)
   const [savedNotes, setSavedNotes] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [currentVideo, setCurrentVideo] = useState(null) // For local video playback
+
+  // Auth State
+  const [user, setUser] = useState(null); // { username, role, id }
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
 
   // Edit vs Preview mode
   const [isEditing, setIsEditing] = useState(false)
@@ -328,6 +339,25 @@ function App() {
     }
   };
 
+  const handleLogin = (userData) => {
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    localStorage.removeItem('user');
+    setMode('youtube'); // Reset to default tab
+  };
+
+  // Check for saved user on mount
+  React.useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+  }, []);
+
   const extractTranscript = async () => {
     if (!youtubeUrl) {
       setError('Please enter a YouTube URL')
@@ -401,6 +431,15 @@ function App() {
     }
   }
 
+  // Show auth screens if not logged in
+  if (!user) {
+    return authMode === 'login' ? (
+      <Login onLogin={handleLogin} onSwitchToSignup={() => setAuthMode('signup')} />
+    ) : (
+      <Signup onLogin={handleLogin} onSwitchToLogin={() => setAuthMode('login')} />
+    );
+  }
+
   return (
     <div className="App-container">
       {/* Sidebar */}
@@ -456,7 +495,13 @@ function App() {
                     '... Checking Backend'}
             </span>
           </div>
-          <h1>Transcript Extractor</h1>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <h1 style={{ marginBottom: 0 }}>CoursePro AI Dashboard</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>👤 {user.username} ({user.role})</span>
+              <button onClick={handleLogout} className="action-btn" style={{ padding: '0.5rem 1rem' }}>🚪 Logout</button>
+            </div>
+          </div>
 
           <div className="tabs">
             <button
@@ -471,9 +516,29 @@ function App() {
             >
               🎙️ Audio File / Mic
             </button>
+            <button
+              className={`tab ${mode === 'library' ? 'active' : ''}`}
+              onClick={() => setMode('library')}
+            >
+              📚 Video Library
+            </button>
+            <button
+              className={`tab ${mode === 'timeline' ? 'active' : ''}`}
+              onClick={() => setMode('timeline')}
+            >
+              🗺️ Timeline
+            </button>
+            {user.role === 'teacher' && (
+              <button
+                className={`tab ${mode === 'upload' ? 'active' : ''}`}
+                onClick={() => setMode('upload')}
+              >
+                ⬆️ Upload
+              </button>
+            )}
           </div>
 
-          {mode === 'youtube' ? (
+          {mode === 'youtube' && (
             <div className="input-section">
               <div className="badge">
                 <span>📹</span> Extract full transcript from YouTube
@@ -496,7 +561,9 @@ function App() {
                 </button>
               </div>
             </div>
-          ) : (
+          )}
+
+          {mode === 'audio' && (
             <div className="input-section">
               <div className="badge">
                 <span>🎤</span> Upload audio or record voice
@@ -545,6 +612,109 @@ function App() {
                 </div>
               )}
             </div>
+          )}
+
+          {mode === 'timeline' && (
+            <CourseTimeline />
+          )}
+
+          {mode === 'library' && (
+            currentVideo ? (
+              <div className="input-section">
+                <div className="badge">
+                  <span>🎬</span> Now Playing: {currentVideo.title}
+                </div>
+                <div className="video-player-container" style={{
+                  background: 'black',
+                  borderRadius: 'var(--radius-md)',
+                  overflow: 'hidden',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+                  position: 'relative'
+                }}>
+                  <div style={{
+                    padding: '10px 20px',
+                    background: 'linear-gradient(to bottom, rgba(0,0,0,0.8), transparent)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    zIndex: 10
+                  }}>
+                    <h3 style={{ margin: 0, color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>{currentVideo.title}</h3>
+                    <button onClick={() => setCurrentVideo(null)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', width: '30px', height: '30px', borderRadius: '50%', cursor: 'pointer' }}>✕</button>
+                  </div>
+
+                  <video
+                    src={`/api/videos/${currentVideo.filename}`}
+                    controls
+                    autoPlay
+                    width="100%"
+                    style={{ display: 'block' }}
+                  >
+                    <track kind="captions" src="" label="English" default />
+                    Your browser does not support the video tag.
+                  </video>
+
+                  <div className="player-controls" style={{
+                    padding: '15px',
+                    background: '#1a1a1a',
+                    color: '#fff',
+                    display: 'flex',
+                    gap: '1rem',
+                    alignItems: 'center',
+                    borderTop: '1px solid #333'
+                  }}>
+                    <span style={{ fontSize: '0.8rem', color: '#aaa' }}>SPEED:</span>
+                    {[1, 1.25, 1.5, 2].map(speed => (
+                      <button key={speed} onClick={(e) => {
+                        const v = document.querySelector('video');
+                        if (v) v.playbackRate = speed;
+                      }} style={{
+                        background: '#333',
+                        border: '1px solid #555',
+                        color: 'white',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '0.8rem'
+                      }}>{speed}x</button>
+                    ))}
+
+                    <div style={{ flex: 1 }}></div>
+
+                    <button onClick={() => {
+                      // Logic to transcribe this video reusing backend endpoint
+                      // For now we just alert
+                      alert("Transcription from local video: TODO")
+                    }} className="extract-btn" style={{ padding: '5px 15px', fontSize: '0.9rem' }}>
+                      📝 Transcribe & Study
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <VideoLibrary onPlayVideo={(video) => {
+                if (video.type === 'youtube') {
+                  setMode('youtube');
+                  setYoutubeUrl(video.url);
+                  // Slight delay to allow state update before potential auto-click
+                  setTimeout(() => {
+                    const extractBtn = document.querySelector('.extract-btn');
+                    if (extractBtn) extractBtn.click();
+                  }, 500);
+                } else {
+                  setCurrentVideo(video);
+                  setMode('player');
+                }
+              }} />
+            )
+          )}
+
+          {mode === 'upload' && (
+            <UploadVideo onUploadSuccess={() => setMode('library')} />
           )}
 
           {error && (
@@ -618,7 +788,7 @@ function App() {
                           <button onClick={() => setSummary(prev => prev + ' \\(  \\)')} title="Math Expression Small">\( x \)</button>
                           <button onClick={() => setSummary(prev => prev + ' \\( \\sqrt{x} \\)')} title="Square Root">√</button>
                           <button onClick={() => setSummary(prev => prev + ' \\( x^2 \\)')} title="Square">x²</button>
-                          <button onClick={() => setSummary(prev => prev + ' \\( \\int_{a}^{b} f(x) dx \\)')} title="Integral">∫</button>
+                          <button onClick={() => setSummary(prev => prev + ' \\( \\int_{a}^{b} f(x) dx \\)')} title="Sum">∫</button>
                           <button onClick={() => setSummary(prev => prev + ' \\( \\sum_{n=1}^{\\infty} \\)')} title="Sum">∑</button>
                           <button onClick={() => setSummary(prev => prev + ' \\( \\psi \\)')} title="Psi">ψ</button>
                           <button onClick={() => setSummary(prev => prev + ' \\( \\hbar \\)')} title="hbar">ℏ</button>
