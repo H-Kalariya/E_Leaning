@@ -35,10 +35,17 @@ const startServer = async () => {
   let isMemoryDB = false;
   
   if (!MONGO_URI) {
-    console.log('No MONGO_URI provided. Starting in-memory MongoDB server...');
+    console.log('No MONGO_URI provided. Starting local file-backed MongoDB (mongodb-memory-server) ...');
     const { MongoMemoryServer } = require('mongodb-memory-server');
-    const mongoServer = await MongoMemoryServer.create({ 
-      instance: { storageEngine: 'ephemeralForTest' } 
+    // Persist data to disk so app state (notes, users, etc.) survives restarts
+    const dbPath = path.join(__dirname, '..', '.mongo-data');
+    fs.mkdirSync(dbPath, { recursive: true });
+
+    const mongoServer = await MongoMemoryServer.create({
+      instance: {
+        dbPath,
+        storageEngine: 'wiredTiger',
+      },
     });
     MONGO_URI = mongoServer.getUri();
     isMemoryDB = true;
