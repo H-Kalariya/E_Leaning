@@ -626,4 +626,196 @@ button {
   .card {
     padding: 1.5rem;
   }
+
+/* ══════════════════════════════════════════════════════════════
+   NOTES RENDERING AREA — typography for ReactMarkdown + KaTeX
+   ══════════════════════════════════════════════════════════════ */
+
+.notes-render-area {
+  font-family: 'Calibri', 'Segoe UI', system-ui, sans-serif;
+  font-size: 1rem;
+  line-height: 1.75;
+  color: #1e293b;
+}
+
+/* ── Headings ─────────────────────────────────────────────────── */
+.notes-render-area h1 {
+  font-size: 1.9rem;
+  font-weight: 800;
+  margin: 0 0 1rem 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e2e8f0;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+.notes-render-area h2 {
+  font-size: 1.45rem;
+  font-weight: 700;
+  margin: 1.8rem 0 0.75rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #1e293b;
+}
+.notes-render-area h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 1.4rem 0 0.5rem;
+  color: #334155;
+}
+.notes-render-area h4 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 1.2rem 0 0.4rem;
+  color: #475569;
+}
+
+/* ── Paragraphs ───────────────────────────────────────────────── */
+.notes-render-area p {
+  margin: 0 0 0.9rem;
+  color: #334155;
+}
+
+/* ── Lists ────────────────────────────────────────────────────── */
+.notes-render-area ul,
+.notes-render-area ol {
+  margin: 0.5rem 0 1rem 1.5rem;
+  padding: 0;
+}
+.notes-render-area li {
+  margin-bottom: 0.3rem;
+  color: #334155;
+}
+.notes-render-area ul {
+  list-style-type: disc;
+}
+.notes-render-area ol {
+  list-style-type: decimal;
+}
+.notes-render-area ul ul {
+  list-style-type: circle;
+  margin-top: 0.25rem;
+}
+
+/* ── Bold & Italic ────────────────────────────────────────────── */
+.notes-render-area strong {
+  font-weight: 700;
+  color: #0f172a;
+}
+.notes-render-area em {
+  font-style: italic;
+  color: #334155;
+}
+
+/* ── Inline code ──────────────────────────────────────────────── */
+.notes-render-area code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 0.875em;
+  background: #f1f5f9;
+  color: #be123c;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+}
+
+/* ── Code blocks ──────────────────────────────────────────────── */
+.notes-render-area pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 1.1rem 1.3rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 1rem 0 1.25rem;
+  border: 1px solid #1e293b;
+}
+.notes-render-area pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border: none;
+  font-size: 0.9em;
+}
+
+/* ── Blockquote ───────────────────────────────────────────────── */
+.notes-render-area blockquote {
+  border-left: 4px solid #6366f1;
+  background: #f8fafc;
+  margin: 1rem 0;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0 6px 6px 0;
+  color: #475569;
+  font-style: italic;
+}
+
+/* ── Horizontal rule ──────────────────────────────────────────── */
+.notes-render-area hr {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 1.5rem 0;
+}
+
+/* ── KaTeX display math (block) ───────────────────────────────── */
+.notes-render-area .math-display,
+.notes-render-area .katex-display {
+  overflow-x: auto;
+  padding: 0.75rem 0;
+  margin: 0.75rem 0 1rem;
+  text-align: center;
+  font-size: 1.05em;
+}
+.notes-render-area .katex-display > .katex {
+  display: inline-block;
+  text-align: left;
+}
+
+/* ── KaTeX inline math ────────────────────────────────────────── */
+.notes-render-area .math-inline,
+.notes-render-area .katex {
+  font-size: 1.05em;
+}
+
+/* ══ DARK MODE overrides ══════════════════════════════════════════ */
+html.dark .notes-render-area {
+  color: #e2e8f0;
+}
+html.dark .notes-render-area h1 {
+  color: #f1f5f9;
+  border-bottom-color: #334155;
+}
+html.dark .notes-render-area h2 {
+  color: #e2e8f0;
+  border-bottom-color: #334155;
+}
+html.dark .notes-render-area h3 {
+  color: #cbd5e1;
+}
+html.dark .notes-render-area h4 {
+  color: #94a3b8;
+}
+html.dark .notes-render-area p,
+html.dark .notes-render-area li {
+  color: #cbd5e1;
+}
+html.dark .notes-render-area strong {
+  color: #f1f5f9;
+}
+html.dark .notes-render-area em {
+  color: #cbd5e1;
+}
+html.dark .notes-render-area code {
+  background: #1e293b;
+  color: #f472b6;
+  border-color: #334155;
+}
+html.dark .notes-render-area pre {
+  background: #0b1120;
+  border-color: #1e293b;
+}
+html.dark .notes-render-area blockquote {
+  background: #1e293b;
+  color: #94a3b8;
+  border-left-color: #818cf8;
+}
+html.dark .notes-render-area hr {
+  border-top-color: #334155;
+}
 }

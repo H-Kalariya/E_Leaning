@@ -640,28 +640,32 @@ def api_summarize():
             
         print("Generating summary with Groq...")
         
-        system_prompt = r"""You are an expert academic summarizer and scientific note-taker.
+        system_prompt = """You are an expert academic summarizer and scientific note-taker.
 
 You will be given the COMPLETE transcript of a lecture or video.
-Your task is to create a DETAILED, PROFESSIONALLY STRUCTURED note.
+Your task is to create a DETAILED, PROFESSIONALLY STRUCTURED note in GitHub-flavored Markdown.
 
 DIRECTIONS:
 1. GENERATE A TITLE: Create a short, descriptive title for the session.
-2. FORMULAE & EQUATIONS: If the lecture mentions specific mathematical or scientific concepts (e.g., derivatives, gradients, entropy, vectors, physics laws) where a formula is relevant, include the relevant formulae using LaTeX. 
-   - Use \( ... \) for inline math.
-   - Use \[ ... \] for block math.
-3. CODE BLOCKS: If the lecture discusses programming, algorithms, or specific code snippets, include the relevant code blocks using markdown syntax (e.g., ```python ... ```).
+2. FORMULAE & EQUATIONS: If the lecture mentions mathematical or scientific concepts, include formulae using KaTeX syntax.
+   - Use $...$ for INLINE math (e.g., $E = mc^2$, $O(n^2)$, $\\theta$, $x_i$).
+   - Use $$...$$ on its own line for BLOCK/DISPLAY math (e.g., $$\\frac{d}{dx}f(x) = \\lim_{h\\to 0}\\frac{f(x+h)-f(x)}{h}$$).
+   - NEVER use \\( \\) or \\[ \\] delimiters. ONLY use the dollar sign $ and double dollar $$ delimiters.
+3. CODE BLOCKS: For any programming or algorithmic topics, use fenced code blocks with a language tag:
+   ```python
+   # example
+   ```
 4. STRUCTURE:
-   - Use `# [Title]` for the main title.
-   - Use `## [Topic]` for major sections.
-   - Use `### [Subtopic]` for details.
-   - Use **bold text** for key terms and definitions.
+   - Use # [Title] for the main title.
+   - Use ## [Topic] for major sections.
+   - Use ### [Subtopic] for subsections.
+   - Use **bold** for key terms and definitions.
    - Use bullet points and numbered lists for clarity.
 
 ABSOLUTE RULES:
-- Include formulae and code ONLY when they are relevant to the specific content being discussed.
-- Every mathematical variable or scientific constant MUST be wrapped in LaTeX tags (e.g., \( x \), \( \hbar \), \( \pi \)).
-- Output MUST be structured markdown.
+- Include formulae and code ONLY when relevant to the content being discussed.
+- Every mathematical variable MUST be inside $ signs (e.g., $x$, $n$, $\\pi$, $\\alpha$).
+- Output MUST be valid structured Markdown.
 
 OUTPUT FORMAT:
 The first line MUST be: TITLE: [Your Generated Title]
@@ -822,43 +826,56 @@ def manage_notes():
             notes = []
             if os.path.exists(NOTES_DIR):
                 files = sorted(os.listdir(NOTES_DIR), reverse=True)
+                import json
                 for filename in files:
-                    if filename.endswith('.txt'):
-                        file_path = os.path.join(NOTES_DIR, filename)
-                        stats = os.stat(file_path)
+                    file_path = os.path.join(NOTES_DIR, filename)
+                    stats = os.stat(file_path)
+                    if filename.endswith('.json'):
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            try:
+                                data = json.load(f)
+                                title = data.get('title', filename)
+                            except:
+                                title = filename
+                        notes.append({'filename': filename, 'title': title, 'created_at': stats.st_ctime})
+                    elif filename.endswith('.txt'):
                         title = filename
                         with open(file_path, 'r', encoding='utf-8') as f:
                             first_line = f.readline().strip()
                             if first_line:
                                 title = first_line[:50]
-                        notes.append({
-                            'filename': filename,
-                            'title': title,
-                            'created_at': stats.st_ctime
-                        })
+                        notes.append({'filename': filename, 'title': title, 'created_at': stats.st_ctime})
             return jsonify({'notes': notes})
             
         elif request.method == 'POST':
             data = request.get_json()
             content = data.get('content')
             filename = data.get('filename')
+            title = data.get('title', '')
             
             if not content:
                 return jsonify({'error': 'Content is required'}), 400
                 
+            import json
             if filename:
                 filename = secure_filename(filename)
-                file_path = os.path.join(NOTES_DIR, filename)
-                if not os.path.exists(file_path):
+                old_file_path = os.path.join(NOTES_DIR, filename)
+                if not os.path.exists(old_file_path):
                     return jsonify({'error': 'Note not found for update'}), 404
+                
+                if filename.endswith('.txt'):
+                    os.remove(old_file_path)
+                    filename = filename[:-4] + '.json'
+                    
+                file_path = os.path.join(NOTES_DIR, filename)
             else:
                 import datetime
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"note_{timestamp}.txt"
+                filename = f"note_{timestamp}.json"
                 file_path = os.path.join(NOTES_DIR, filename)
             
             with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content)
+                json.dump({'title': title, 'content': content}, f)
             return jsonify({'message': 'Note saved', 'filename': filename})
             
     except Exception as e:
@@ -883,16 +900,21 @@ def manage_note(filename):
                 return jsonify({'error': 'Note not found'}), 404
                 
         elif request.method == 'GET':
-            if not allowed_file(filename) and not filename.endswith('.txt'):
+            import json
+            if not allowed_file(filename) and not filename.endswith('.txt') and not filename.endswith('.json'):
                  return jsonify({'error': 'Invalid filename'}), 400
 
             if not os.path.exists(file_path):
                 return jsonify({'error': 'Note not found'}), 404
                 
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                
-            return jsonify({'content': content})
+            if filename.endswith('.json'):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return jsonify({'content': data.get('content', ''), 'title': data.get('title', '')})
+            else:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                return jsonify({'content': content})
             
     except Exception as e:
         print(f"Error managing note ({request.method}): {e}")
