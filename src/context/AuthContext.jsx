@@ -8,6 +8,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   const API_URL = '/api/auth';
+  const premiumKey = (userId) => `mockPremium:${userId}`;
 
   useEffect(() => {
     const userInfo = localStorage.getItem('userInfo');
@@ -22,10 +23,10 @@ export const AuthProvider = ({ children }) => {
             // Token expired — clear it silently
             localStorage.removeItem('userInfo');
           } else {
-            // Restore persistent mock premium status to survive ephemeral DB resets
-            if (localStorage.getItem('mockPremium') === 'true') {
-              parsedUser.isPremium = true;
-            }
+            // Restore persistent mock premium status (PER-USER) to survive ephemeral DB resets
+            // Also cleanup legacy global key if it exists.
+            if (localStorage.getItem('mockPremium') === 'true') localStorage.removeItem('mockPremium');
+            if (parsedUser?._id && localStorage.getItem(premiumKey(parsedUser._id)) === 'true') parsedUser.isPremium = true;
             setUser(parsedUser);
             axios.defaults.headers.common['Authorization'] = `Bearer ${parsedUser.token}`;
           }
@@ -62,7 +63,8 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const res = await axios.post(`${API_URL}/login`, { email, password });
-    if (localStorage.getItem('mockPremium') === 'true') res.data.isPremium = true;
+    if (localStorage.getItem('mockPremium') === 'true') localStorage.removeItem('mockPremium'); // legacy cleanup
+    if (res.data?._id && localStorage.getItem(premiumKey(res.data._id)) === 'true') res.data.isPremium = true;
     setUser(res.data);
     localStorage.setItem('userInfo', JSON.stringify(res.data));
     axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
@@ -89,14 +91,14 @@ export const AuthProvider = ({ children }) => {
       const updatedUser = { ...user, isPremium: true };
       setUser(updatedUser);
       localStorage.setItem('userInfo', JSON.stringify(updatedUser));
-      localStorage.setItem('mockPremium', 'true');
+      if (updatedUser?._id) localStorage.setItem(premiumKey(updatedUser._id), 'true');
       return res.data;
     } catch (error) {
       console.error("Backend upgrade failed, forcing frontend upgrade anyway", error);
       const updatedUser = { ...user, isPremium: true };
       setUser(updatedUser);
       localStorage.setItem('userInfo', JSON.stringify(updatedUser));
-      localStorage.setItem('mockPremium', 'true');
+      if (updatedUser?._id) localStorage.setItem(premiumKey(updatedUser._id), 'true');
       return { isPremium: true };
     }
   };

@@ -108,7 +108,7 @@ const CoursePlayer = () => {
   const { user } = useAuth();
   const { isDark } = useTheme();
   
-  const userIsPremium = user?.isPremium || localStorage.getItem('mockPremium') === 'true';
+  const userIsPremium = user?.isPremium || (user?._id && localStorage.getItem(`mockPremium:${user._id}`) === 'true');
 
   const [videos, setVideos] = useState([]);
   const [activeVideo, setActiveVideo] = useState(null);

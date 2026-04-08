@@ -238,7 +238,7 @@ function AppShell({ children, pageTitle }) {
   const { isDark, setIsDark } = useTheme();
   const [showPremium, setShowPremium] = useState(false);
   
-  const userIsPremium = user?.isPremium || localStorage.getItem('mockPremium') === 'true';
+  const userIsPremium = user?.isPremium || (user?._id && localStorage.getItem(`mockPremium:${user._id}`) === 'true');
 
   if (!user) return children; // no shell for auth pages
 

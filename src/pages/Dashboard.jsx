@@ -11,7 +11,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   
   // Extra layer of redundancy to ensure UI updates instantly even if context lags
-  const userIsPremium = user?.isPremium || localStorage.getItem('mockPremium') === 'true';
+  const userIsPremium = user?.isPremium || (user?._id && localStorage.getItem(`mockPremium:${user._id}`) === 'true');
 
   useEffect(() => {
     axios.get(`${API_URL}/course/all`)
