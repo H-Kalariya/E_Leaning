@@ -168,6 +168,15 @@ const CoursePlayer = () => {
   useEffect(() => {
     if (activeVideo) fetchNotes(activeVideo._id);
   }, [activeVideo]);
+  
+  // If the student upgrades to premium while on this page, re-fetch notes immediately
+  useEffect(() => {
+    if (!activeVideo) return;
+    if (user?.role !== 'Student') return;
+    if (!userIsPremium) return;
+    // Re-fetch so a previous 403 ("Premium Required") instantly resolves after upgrade
+    fetchNotes(activeVideo._id);
+  }, [userIsPremium]);
 
   // ── Normalize LaTeX delimiters: converts \( \) → $..$ and \[ \] → $$..$$
   const normalizeLatex = (text) => {
@@ -407,7 +416,7 @@ const CoursePlayer = () => {
                       )}
                     </>
                   )}
-                  {notes && (user?.role !== 'Student' || user?.isPremium) && (
+                  {notes && (user?.role !== 'Student' || userIsPremium) && (
                     <button
                       onClick={handleDownloadPDF}
                       className="btn-grad"

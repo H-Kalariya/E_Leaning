@@ -2,6 +2,7 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const Payment = require('../models/Payment');
 const Subscription = require('../models/Subscription');
+const User = require('../models/User');
 
 const activateSubscription = async (req, res) => {
   try {
@@ -25,7 +26,10 @@ const activateSubscription = async (req, res) => {
       });
     }
 
-    res.json({ message: 'Subscription activated', subscription });
+    // Keep the canonical user flag in sync so other endpoints can gate reliably
+    await User.updateOne({ _id: req.user._id }, { $set: { isPremium: true } });
+
+    res.json({ message: 'Subscription activated', subscription, isPremium: true });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

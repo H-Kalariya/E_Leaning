@@ -1,11 +1,27 @@
 const Note = require('../models/Note');
 const Subscription = require('../models/Subscription');
 
+const isStudentPremium = async (userId) => {
+  const sub = await Subscription.findOne({
+    studentId: userId,
+    isActive: true,
+    expiryDate: { $gt: new Date() },
+  }).lean();
+  return !!sub;
+};
+
 const checkPremium = async (req, res, next) => {
-  if (req.user.role === 'Student' && !req.user.isPremium) {
-    return res.status(403).json({ message: 'Premium subscription required for this action' });
+  try {
+    if (req.user.role !== 'Student') return next();
+    if (req.user.isPremium) return next();
+    const ok = await isStudentPremium(req.user._id);
+    if (!ok) {
+      return res.status(403).json({ message: 'Premium subscription required for this action' });
+    }
+    return next();
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
   }
-  next();
 };
 
 const generateNotes = async (req, res) => {
@@ -36,7 +52,10 @@ const getNotes = async (req, res) => {
   try {
     if (req.user.role === 'Student') {
       if (!req.user.isPremium) {
-        return res.status(403).json({ message: 'Premium Required: Please upgrade on your Dashboard to view AI generate notes.' });
+        const ok = await isStudentPremium(req.user._id);
+        if (!ok) {
+          return res.status(403).json({ message: 'Premium Required: Please upgrade on your Dashboard to view AI generate notes.' });
+        }
       }
     }
     const notes = await Note.find({ videoId: req.params.videoId });
