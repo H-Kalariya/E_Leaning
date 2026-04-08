@@ -28,6 +28,7 @@ __pycache__/
 *.pyc
 venv/
 .env
+.mongo-data/
 
 # User Data
 notes/
